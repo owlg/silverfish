@@ -24,6 +24,9 @@
         public bool canbeTriggeredWithAttackingHero = true;
         public bool canbeTriggeredWithAttackingMinion = true;
         public bool canbeTriggeredWithPlayingMinion = true;
+        public bool canbeTriggeredWithKillingMinion = true;
+
+
 
         public bool canBe_snaketrap = true;
         public bool canBe_snipe = true;
@@ -44,6 +47,15 @@
         public bool canBe_redemption = true;
         public bool canBe_repentance = true;
         public bool canBe_avenge = true;
+        
+
+        //new TGT---
+        public bool canBe_effigy = true;
+        public bool canBe_beartrap = true;
+        public bool canBe_competivespirit = true;
+
+        // LOE
+        public bool canBe_Trial = true;
 
         public int entityId = 0;
 
@@ -57,6 +69,7 @@
             this.canbeTriggeredWithAttackingHero = sec.canbeTriggeredWithAttackingHero;
             this.canbeTriggeredWithAttackingMinion = sec.canbeTriggeredWithAttackingMinion;
             this.canbeTriggeredWithPlayingMinion = sec.canbeTriggeredWithPlayingMinion;
+            this.canbeTriggeredWithKillingMinion = sec.canbeTriggeredWithKillingMinion;
 
             this.canBe_avenge = sec.canBe_avenge;
             this.canBe_counterspell = sec.canBe_counterspell;
@@ -75,6 +88,12 @@
             this.canBe_snipe = sec.canBe_snipe;
             this.canBe_spellbender = sec.canBe_spellbender;
             this.canBe_vaporize = sec.canBe_vaporize;
+
+            this.canBe_effigy = sec.canBe_effigy;
+            this.canBe_beartrap = sec.canBe_beartrap;
+            this.canBe_competivespirit = sec.canBe_competivespirit;
+
+            this.canBe_Trial = sec.canBe_Trial;
 
             this.entityId = sec.entityId;
 
@@ -110,6 +129,29 @@
             this.canBe_repentance = (canbe[15] == '1');
             this.canBe_avenge = (canbe[16] == '1');
 
+            //update TGT
+            try
+            {
+                this.canBe_effigy = (canbe[17] == '1');
+                this.canBe_beartrap = (canbe[18] == '1');
+                this.canBe_competivespirit = (canbe[19] == '1');
+            }
+            catch
+            {
+                this.canBe_effigy = false;
+                this.canBe_beartrap = false;
+                this.canBe_competivespirit = false;
+            }
+
+            try
+            {
+                this.canBe_Trial = (canbe[20] == '1');
+            }
+            catch
+            {
+                this.canBe_Trial = false;
+            }
+
             this.updateCanBeTriggered();
         }
 
@@ -118,12 +160,17 @@
             this.canbeTriggeredWithAttackingHero = false;
             this.canbeTriggeredWithAttackingMinion = false;
             this.canbeTriggeredWithPlayingMinion = false;
+            this.canbeTriggeredWithKillingMinion = false;
+            
 
             if (this.canBe_snipe || this.canBe_mirrorentity || this.canBe_repentance) this.canbeTriggeredWithPlayingMinion = true;
 
-            if (this.canBe_explosive || this.canBe_missdirection || this.canBe_freezing || this.canBe_icebarrier || this.canBe_vaporize || this.canBe_noblesacrifice) this.canbeTriggeredWithAttackingHero = true;
+            if (this.canBe_explosive || this.canBe_missdirection || this.canBe_freezing || this.canBe_icebarrier || this.canBe_vaporize || this.canBe_noblesacrifice || this.canBe_beartrap) this.canbeTriggeredWithAttackingHero = true;
 
             if (this.canBe_snaketrap || this.canBe_freezing || this.canBe_noblesacrifice) this.canbeTriggeredWithAttackingMinion = true;
+
+            if (this.canBe_avenge || this.canBe_redemption || this.canBe_duplicate || this.canBe_effigy) this.canbeTriggeredWithKillingMinion = true;
+
 
         }
 
@@ -136,6 +183,8 @@
 
                 this.canBe_icebarrier = false;
                 this.canBe_vaporize = false;
+
+                this.canBe_beartrap = false;
 
             }
             else
@@ -150,11 +199,12 @@
             updateCanBeTriggered();
         }
 
-        public void usedTrigger_MinionIsPlayed()
+        public void usedTrigger_MinionIsPlayed(int numberMinionsOnBoard)
         {
             this.canBe_snipe = false;
             this.canBe_mirrorentity = false;
             this.canBe_repentance = false;
+            if (numberMinionsOnBoard >= 3) this.canBe_Trial = false;
             updateCanBeTriggered();
         }
 
@@ -170,6 +220,8 @@
             this.canBe_avenge = false;
             this.canBe_redemption = false;
             this.canBe_duplicate = false;
+            this.canBe_effigy = false;
+
             updateCanBeTriggered();
         }
 
@@ -177,6 +229,13 @@
         {
             this.canBe_eyeforaneye = false;
             if (deadly) this.canBe_iceblock = false;
+            updateCanBeTriggered();
+        }
+
+        public void usedTrigger_EndTurn()
+        {
+
+            this.canBe_competivespirit = false;
             updateCanBeTriggered();
         }
 
@@ -202,6 +261,13 @@
             retval += "" + ((canBe_redemption) ? "1" : "0");
             retval += "" + ((canBe_repentance) ? "1" : "0");
             retval += "" + ((canBe_avenge) ? "1" : "0");
+
+            retval += "" + ((canBe_effigy) ? "1" : "0");
+            retval += "" + ((canBe_beartrap) ? "1" : "0");
+            retval += "" + ((canBe_competivespirit) ? "1" : "0");
+
+            retval += "" + ((canBe_Trial) ? "1" : "0");
+
             return retval + ",";
         }
 
@@ -212,6 +278,8 @@
             result = result && this.canBe_eyeforaneye == s.canBe_eyeforaneye && this.canBe_freezing == s.canBe_freezing && this.canBe_icebarrier == s.canBe_icebarrier && this.canBe_iceblock == s.canBe_iceblock;
             result = result && this.canBe_mirrorentity == s.canBe_mirrorentity && this.canBe_missdirection == s.canBe_missdirection && this.canBe_noblesacrifice == s.canBe_noblesacrifice && this.canBe_redemption == s.canBe_redemption;
             result = result && this.canBe_repentance == s.canBe_repentance && this.canBe_snaketrap == s.canBe_snaketrap && this.canBe_snipe == s.canBe_snipe && this.canBe_spellbender == s.canBe_spellbender && this.canBe_vaporize == s.canBe_vaporize;
+            result = result && this.canBe_effigy == s.canBe_effigy && this.canBe_beartrap == s.canBe_beartrap && this.canBe_competivespirit == s.canBe_competivespirit;
+            result = result && this.canBe_Trial == s.canBe_Trial;
 
             return result;
         }
@@ -220,6 +288,8 @@
 
     public class Probabilitymaker
     {
+        public bool hasDeck = false;
+
         public Dictionary<CardDB.cardIDEnum, int> ownCardsPlayed = new Dictionary<CardDB.cardIDEnum, int>();
         public Dictionary<CardDB.cardIDEnum, int> enemyCardsPlayed = new Dictionary<CardDB.cardIDEnum, int>();
         List<CardDB.Card> ownDeckGuessed = new List<CardDB.Card>();
@@ -237,6 +307,8 @@
         public int enemyGraveYardCommonAttack = 0;
         public int enemyGraveYardCommonHP = 0;
         public int enemyGraveYardCommonTaunt = 0;
+
+        public int anzMinionSinGrave = 0;
 
         public bool feugenDead = false;
         public bool stalaggDead = false;
@@ -265,7 +337,7 @@
             setupDeck(list, enemyDeckGuessed, enemyCardsPlayed);
         }
 
-        public void printTurnGraveYard(bool writetobuffer = false)
+        public string printTurnGraveYard(bool writetobuffer = false, bool dontwrite=false)
         {
             /*string g = "";
             if (Probabilitymaker.Instance.feugenDead) g += " fgn";
@@ -273,21 +345,35 @@
             Helpfunctions.Instance.logg("GraveYard:" + g);
             if (writetobuffer) Helpfunctions.Instance.writeToBuffer("GraveYard:" + g);*/
 
+            string data = "";
             string s = "ownDiedMinions: ";
             foreach (GraveYardItem gyi in this.turngraveyard)
             {
                 if (gyi.own) s += gyi.cardid + "," + gyi.entity + ";";
             }
-            Helpfunctions.Instance.logg(s);
-            if (writetobuffer) Helpfunctions.Instance.writeToBuffer(s);
+
+            if (!dontwrite)
+            {
+                Helpfunctions.Instance.logg(s);
+                if (writetobuffer) Helpfunctions.Instance.writeToBuffer(s);
+            }
+
+            data += s + "\r\n";
 
             s = "enemyDiedMinions: ";
             foreach (GraveYardItem gyi in this.turngraveyard)
             {
                 if (!gyi.own) s += gyi.cardid + "," + gyi.entity + ";";
             }
-            Helpfunctions.Instance.logg(s);
-            if (writetobuffer) Helpfunctions.Instance.writeToBuffer(s);
+
+            if (!dontwrite)
+            {
+                Helpfunctions.Instance.logg(s);
+                if (writetobuffer) Helpfunctions.Instance.writeToBuffer(s);
+            }
+
+            data += s + "\r\n";
+            return data;
         }
 
         public void readTurnGraveYard(string own, string enemy)
@@ -433,7 +519,7 @@
 
         }
 
-        public void printGraveyards(bool writetobuffer = false)
+        public string printGraveyards(bool writetobuffer = false, bool dontwrite = false)
         {
             string og = "og: ";
             foreach (KeyValuePair<CardDB.cardIDEnum, int> e in this.ownCardsPlayed)
@@ -445,13 +531,17 @@
             {
                 eg += (int)e.Key + "," + e.Value + ";";
             }
-            Helpfunctions.Instance.logg(og);
-            Helpfunctions.Instance.logg(eg);
-            if (writetobuffer)
+            if (!dontwrite)
             {
-                Helpfunctions.Instance.writeToBuffer(og);
-                Helpfunctions.Instance.writeToBuffer(eg);
+                Helpfunctions.Instance.logg(og);
+                Helpfunctions.Instance.logg(eg);
+                if (writetobuffer)
+                {
+                    Helpfunctions.Instance.writeToBuffer(og);
+                    Helpfunctions.Instance.writeToBuffer(eg);
+                }
             }
+            return og + "\r\n" + eg + "\r\n";
         }
 
         public void readGraveyards(string owngrave, string enemygrave)
@@ -468,10 +558,30 @@
             int temptaunt = 0;
             foreach (string s in temp.Split(';'))
             {
-                if (s == "" || s == " ") continue;
-                string id = s.Split(',')[0];
-                int anz = Convert.ToInt32(s.Split(',')[1]);
-                CardDB.cardIDEnum cdbe = (CardDB.cardIDEnum)Convert.ToInt32(id);
+                string ss = s.Replace(" ", "");
+                if (ss == "" || ss == " ") continue;
+                string id = ss.Split(',')[0];
+                int anz = Convert.ToInt32(ss.Split(',')[1]);
+                CardDB.cardIDEnum cdbe = CardDB.cardIDEnum.None;
+                try
+                {
+                    cdbe = (CardDB.cardIDEnum)Convert.ToInt32(id);
+                }
+                catch
+                {
+                    
+                }
+                if (cdbe == CardDB.cardIDEnum.None)
+                {
+                    try
+                    {
+                        cdbe = CardDB.Instance.cardIdstringToEnum(id);
+                    }
+                    catch
+                    {
+
+                    }
+                }
                 this.ownCardsPlayed.Add(cdbe, anz);
                 if (cdbe == CardDB.cardIDEnum.FP1_015)
                 {
@@ -482,6 +592,7 @@
                 CardDB.Card tempcard = CardDB.Instance.getCardDataFromID(cdbe);
                 if (tempcard.type == CardDB.cardtype.MOB)
                 {
+                    this.anzMinionSinGrave++;
                     tempamount++;
                     tempattack += tempcard.Attack * anz;
                     temphp += tempcard.Health * anz;
@@ -506,10 +617,32 @@
             temp = enemygrave.Replace("eg: ", "");
             foreach (string s in temp.Split(';'))
             {
-                if (s == "" || s == " ") continue;
-                string id = s.Split(',')[0];
-                int anz = Convert.ToInt32(s.Split(',')[1]);
-                CardDB.cardIDEnum cdbe = (CardDB.cardIDEnum)Convert.ToInt32(id);
+                string ss = s.Replace(" ", "");
+                if (ss == "" || ss == " ") continue;
+                string id = ss.Split(',')[0];
+                int anz = Convert.ToInt32(ss.Split(',')[1]);
+                CardDB.cardIDEnum cdbe = CardDB.cardIDEnum.None;
+                try
+                {
+                    cdbe = (CardDB.cardIDEnum)Convert.ToInt32(id);
+                }
+                catch
+                {
+ 
+                }
+
+                if (cdbe == CardDB.cardIDEnum.None)
+                {
+                    try
+                    {
+                        cdbe = CardDB.Instance.cardIdstringToEnum(id);
+                    }
+                    catch
+                    {
+
+                    }
+                }
+
                 this.enemyCardsPlayed.Add(cdbe, anz);
                 if (cdbe == CardDB.cardIDEnum.FP1_015) this.feugenDead = true;
                 if (cdbe == CardDB.cardIDEnum.FP1_014) this.stalaggDead = true;
@@ -612,6 +745,12 @@
                 sec.canBe_repentance = false;
                 sec.canBe_avenge = false;
 
+                sec.canBe_competivespirit = false;
+                sec.canBe_effigy = false;
+
+                sec.canBe_Trial = false;
+
+
                 if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.EX1_554) && enemyCardsPlayed[CardDB.cardIDEnum.EX1_554] >= 2)
                 {
                     sec.canBe_snaketrap = false;
@@ -636,6 +775,11 @@
                 {
                     sec.canBe_missdirection = false;
                 }
+
+                if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.AT_060) && enemyCardsPlayed[CardDB.cardIDEnum.AT_060] >= 2)
+                {
+                    sec.canBe_beartrap = false;
+                }
             }
 
             if (enemyHeroName == HeroEnum.mage)
@@ -651,6 +795,11 @@
                 sec.canBe_redemption = false;
                 sec.canBe_repentance = false;
                 sec.canBe_avenge = false;
+
+                sec.canBe_competivespirit = false;
+                sec.canBe_beartrap = false;
+
+                sec.canBe_Trial = false;
 
                 if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.EX1_287) && enemyCardsPlayed[CardDB.cardIDEnum.EX1_287] >= 2)
                 {
@@ -686,11 +835,15 @@
                 {
                     sec.canBe_duplicate = false;
                 }
+
+                if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.AT_002) && enemyCardsPlayed[CardDB.cardIDEnum.AT_002] >= 2)
+                {
+                    sec.canBe_effigy = false;
+                }
             }
 
             if (enemyHeroName == HeroEnum.pala)
             {
-
                 sec.canBe_snaketrap = false;
                 sec.canBe_snipe = false;
                 sec.canBe_explosive = false;
@@ -704,6 +857,11 @@
                 sec.canBe_spellbender = false;
                 sec.canBe_vaporize = false;
                 sec.canBe_duplicate = false;
+
+                sec.canBe_effigy = false;
+                sec.canBe_beartrap = false;
+
+
 
                 if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.EX1_132) && enemyCardsPlayed[CardDB.cardIDEnum.EX1_132] >= 2)
                 {
@@ -728,6 +886,16 @@
                 if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.FP1_020) && enemyCardsPlayed[CardDB.cardIDEnum.FP1_020] >= 2)
                 {
                     sec.canBe_avenge = false;
+                }
+
+                if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.AT_073) && enemyCardsPlayed[CardDB.cardIDEnum.AT_073] >= 2)
+                {
+                    sec.canBe_competivespirit = false;
+                }
+
+                if (enemyCardsPlayed.ContainsKey(CardDB.cardIDEnum.LOE_027) && enemyCardsPlayed[CardDB.cardIDEnum.LOE_027] >= 2)
+                {
+                    sec.canBe_Trial = false;
                 }
 
             }
@@ -805,6 +973,8 @@
             bool attackedWithHero = false;
             int attackTargetIsMinion = 0;
             bool enemyHeroGotDmg = false;
+            int minionsOnBoard = old.enemyMinions.Count;
+            bool endedTurn = false;
 
             Handmanager.Handcard hcard = null;
             if (p.cardsPlayedThisTurn > old.cardsPlayedThisTurn)
@@ -907,6 +1077,7 @@
                 if (newDefenders < oldDefenders) attackTargetIsMinion = 2;
             }
 
+            if (old.optionsPlayedThisTurn >= 0 && p.optionsPlayedThisTurn == 0) endedTurn = true;
 
             foreach (SecretItem si in this.enemySecrets)
             {
@@ -917,9 +1088,11 @@
 
                 if (enemyMinionDied) si.usedTrigger_MinionDied();
 
-                if (playedMob) si.usedTrigger_MinionIsPlayed();
+                if (playedMob) si.usedTrigger_MinionIsPlayed(minionsOnBoard);
 
                 if (usedspell) si.usedTrigger_SpellIsPlayed(lastEffectedIsMinion == 2);
+
+                if (endedTurn) si.usedTrigger_EndTurn();
 
             }
         }

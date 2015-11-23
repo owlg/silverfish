@@ -56,10 +56,16 @@ namespace HREngine.Bots
         {
             get
             {
+                
                 return "Author of HR-Silver-translator: Rush4xDev "+"\r\n" +
-                       "This is silver fish A.I. module.";
+                       "This is silver fish A.I. module.\r\nyou are running version V" + Silverfish.Instance.versionnumber +" on speed\r\n" +
+                       "\r\n\r\n\r\n\r\n\r\ni hope you dont see the following version number :P"
+                       ;
+
             }
         }
+
+        bool doMultipleThingsAtATime = false;
 
         //private int stopAfterWins = 30;
         private int concedeLvl = 5; // the rank, till you want to concede
@@ -68,9 +74,14 @@ namespace HREngine.Bots
         private string choiceCardId = "";
         DateTime starttime = DateTime.Now;
         Silverfish sf;
-        
 
         Behavior behave = new BehaviorControl();
+
+        //stuff for attack queueing :D
+        public int numExecsReceived = 0;
+        public int numActionsSent = 0;
+        public bool shouldSendActions = true;
+        public List<Playfield> queuedMoveGuesses = new List<Playfield>();
 
 
         //
@@ -107,7 +118,33 @@ namespace HREngine.Bots
             //Helpfunctions.Instance.ErrorLog("test... " + Settings.Instance.logpath + Settings.Instance.logfile);
             if (Settings.Instance.useExternalProcess) Helpfunctions.Instance.ErrorLog("YOU USE SILVER.EXE FOR CALCULATION, MAKE SURE YOU STARTED IT!");
             if (Settings.Instance.useExternalProcess) Helpfunctions.Instance.ErrorLog("SILVER.EXE IS LOCATED IN: " + Settings.Instance.path);
+            
+            if (Settings.Instance.useExternalProcess)
+            {
+                System.Diagnostics.Process[] pname = System.Diagnostics.Process.GetProcessesByName("Silver");
+                string directory = Settings.Instance.path + "Silver.exe";
+                bool hasToOpen = true;
+                
+                if (pname.Length >= 1)
+                {
+                    
+                    for (int i = 0; i < pname.Length; i++)
+                    {
+                        
+                        string fullPath = pname[i].Modules[0].FileName;
+                        if (fullPath == directory) hasToOpen = false;
+                    }
+                }
 
+                if (hasToOpen)
+                {
+                    System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo(directory);
+                    startInfo.WorkingDirectory = Settings.Instance.path;
+                    System.Diagnostics.Process.Start(startInfo);
+                }
+
+                System.Threading.Thread.Sleep(500);
+            }
 
 
             if (teststuff)//run autotester for developpers
@@ -115,6 +152,9 @@ namespace HREngine.Bots
                 Ai.Instance.autoTester(printstuff);
             }
             writeSettings();
+
+            this.doMultipleThingsAtATime = Settings.Instance.speedy;
+            this.doMultipleThingsAtATime = false; // for easier debugging+bug fixing in the first weeks after update
         }
 
         /// <summary>
@@ -150,22 +190,31 @@ namespace HREngine.Bots
 
              Entity enemyPlayer = base.EnemyHero;
              Entity ownPlayer = base.FriendHero;
-
                 string enemName = Hrtprozis.Instance.heroIDtoName(enemyPlayer.CardId);
                 string ownName = Hrtprozis.Instance.heroIDtoName(ownPlayer.CardId);
 
+                
+
                 if (Mulligan.Instance.hasmulliganrules(ownName, enemName))
                 {
-
+                    bool hascoin = false;
                     List<Mulligan.CardIDEntity> celist = new List<Mulligan.CardIDEntity>();
+                    
                     foreach (var item in list)
                     {
+                        Helpfunctions.Instance.ErrorLog("cards on hand for mulligan: " + item.CardId);
                         if (item.CardId != "GAME_005")// dont mulligan coin
                         {
                             celist.Add(new Mulligan.CardIDEntity(item.CardId, item.EntityId));
                         }
+                        else
+                        {
+                            hascoin = true;
+                        }
+                        
                     }
-                    List<int> mullientitys = Mulligan.Instance.whatShouldIMulligan(celist, ownName, enemName);
+                    if (celist.Count >= 4) hascoin = true;
+                    List<int> mullientitys = Mulligan.Instance.whatShouldIMulligan(celist, ownName, enemName, hascoin);
                     foreach (var item in list)
                     {
                         if (mullientitys.Contains(item.EntityId))
@@ -227,7 +276,11 @@ namespace HREngine.Bots
         /// <param name="e">e.deck_list -- all cards id in the deck.</param>
         public override void OnGameStart(GameStartEventArgs e)
         {
-            //do nothing here
+            //do something here
+
+            // reset instance vars
+            numExecsReceived = 0;
+            numActionsSent = 0;
         }
 
         /// <summary>
@@ -335,6 +388,7 @@ namespace HREngine.Bots
                     break;
                 case actionEnum.playcard:
                     ranger_action.Actor = getCardWithNumber(moveTodo.card.entity);
+                    if (ranger_action.Actor == null) return null;  // missing entity likely because new spawned minion
                     break;
                 case actionEnum.attackWithHero:
                     ranger_action.Actor = base.FriendHero;
@@ -344,15 +398,18 @@ namespace HREngine.Bots
                     break;
                 case actionEnum.attackWithMinion:
                     ranger_action.Actor = getEntityWithNumber(moveTodo.own.entitiyID);
+                    if (ranger_action.Actor == null) return null;  // missing entity likely because new spawned minion
                     break;
                 default:
                     break;
             }
 
-             if (moveTodo.target != null)
-             {
-                 ranger_action.Target = getEntityWithNumber(moveTodo.target.entitiyID);
-             }
+            if (moveTodo.target != null)
+            {
+                ranger_action.Target = getEntityWithNumber(moveTodo.target.entitiyID);
+                if (ranger_action.Target == null) return null;  // missing entity likely because new spawned minion
+            }
+
 
              ranger_action.Type = GetRangerActionType(ranger_action.Actor, ranger_action.Target, moveTodo.actionType);
 
@@ -362,10 +419,13 @@ namespace HREngine.Bots
              }
 
              ranger_action.Index = moveTodo.place;
-
+             if (moveTodo.place >= 1) ranger_action.Index = moveTodo.place - 1;
 
              if (moveTodo.target != null)
              {
+                 //ranger stuff :D
+                 ranger_action.ID = moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId);
+
                  Helpfunctions.Instance.ErrorLog(moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId)
                                                   + " target: " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Target.CardId));
                  Helpfunctions.Instance.logg(moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId)
@@ -376,12 +436,19 @@ namespace HREngine.Bots
              }
              else
              {
+                 //ranger stuff :D
+                 ranger_action.ID = moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId);
+
                  Helpfunctions.Instance.ErrorLog(moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId)
                                                   + " target nothing");
                  Helpfunctions.Instance.logg(moveTodo.actionType.ToString() + ": " + HSRangerLib.CardDefDB.Instance.GetCardEnglishName(ranger_action.Actor.CardId)
                                                   + " choice: " + moveTodo.druidchoice + " place" + moveTodo.place);
              }
 
+
+             //string path = SiverFishBotPath.AssemblyDirectory + System.IO.Path.DirectorySeparatorChar + "HRERRORLogs" + System.IO.Path.DirectorySeparatorChar;
+             //System.IO.Directory.CreateDirectory(path);
+             //this.gameState.SaveToXMLFile(path + "HRErrorLog" + DateTime.Now.ToString("_yyyy-MM-dd_HH-mm-ss") + ".xml");
 
              return ranger_action;
         }
@@ -402,6 +469,8 @@ namespace HREngine.Bots
             
             try
             {
+
+                //we are conceding
                 if (this.isgoingtoconcede)
                 {
                     if (HSRangerLib.RangerBotSettings.CurrentSettingsGameType == HSRangerLib.enGameType.The_Arena)
@@ -421,9 +490,17 @@ namespace HREngine.Bots
                     return;
                 }
 
-                bool templearn = sf.updateEverything(this,behave, Settings.Instance.useExternalProcess, false); // cant use passive waiting (in this mode i return nothing)
+                bool templearn = sf.updateEverything(this, behave, doMultipleThingsAtATime, Settings.Instance.useExternalProcess, false); // cant use passive waiting (in this mode i return nothing)
                 if (templearn == true) Settings.Instance.printlearnmode = true;
 
+                // actions-queue-stuff
+                //  AI has requested to ignore this update, so return without setting any actions.
+                if (!shouldSendActions)
+                {
+                    Helpfunctions.Instance.ErrorLog("shouldsendactionsblah");
+                    shouldSendActions = true;  // unpause ourselves for next time
+                    return;
+                }
 
 
                 if (Settings.Instance.learnmode)
@@ -438,27 +515,110 @@ namespace HREngine.Bots
                     return;
                 }
 
-
-
+                if (Settings.Instance.enemyConcede) Helpfunctions.Instance.ErrorLog("bestmoveVal:" + Ai.Instance.bestmoveValue);
+                
                 if (Ai.Instance.bestmoveValue <= -900 && Settings.Instance.enemyConcede) 
-                { 
+                {
                     e.action_list.Add(CreateRangerConcedeAction());
                     return;
                 }
 
-                Action moveTodo = Ai.Instance.bestmove;
-
-                if (moveTodo == null || moveTodo.actionType == actionEnum.endturn)
+                if (Handmanager.Instance.getNumberChoices() >= 1)
                 {
-                    //simply clear action list, hearthranger bot will endturn if no action can do.
-                    e.action_list.Clear();                    
+                    //detect which choice
+
+                    int trackingchoice = Ai.Instance.bestTracking;
+                    if (Ai.Instance.bestTrackingStatus == 0) Helpfunctions.Instance.logg("discovering using optimal choice..." + trackingchoice);
+                    if (Ai.Instance.bestTrackingStatus == 1) Helpfunctions.Instance.logg("discovering using suboptimal choice..." + trackingchoice);
+                    if (Ai.Instance.bestTrackingStatus == 2) Helpfunctions.Instance.logg("discovering using random choice..." + trackingchoice);
+
+                    trackingchoice = Silverfish.Instance.choiceCardsEntitys[trackingchoice - 1];
+                    
+                    //there is a tracking/discover effect ongoing! (not druid choice)
+                    BotAction trackingaction = new HSRangerLib.BotAction();
+                    trackingaction.Actor = this.getEntityWithNumber(trackingchoice);
+                    Helpfunctions.Instance.logg("discovering choice entity" + trackingchoice + " card " + trackingaction.Actor.CardId);
+
+                    //DEBUG stuff
+                    //Helpfunctions.Instance.logg("actor: cardid " + trackingaction.Actor.CardId + " entity " + trackingaction.Actor.EntityId);
+                    
+                    e.action_list.Add(trackingaction);
+                    
+                    //string filename = "silvererror" + DateTime.Now.ToString("_yyyy-MM-dd_HH-mm-ss") + ".xml";
+                    //Helpfunctions.Instance.logg("create errorfile " +  filename);
+                    //this.gameState.SaveToXMLFile(filename);
                     return;
                 }
 
-                Helpfunctions.Instance.ErrorLog("play action");
-                moveTodo.print();
+                if (!doMultipleThingsAtATime)
+                {
+                    //this is used if you cant queque actions (so ai is just sending one action at a time)
+                    Action moveTodo = Ai.Instance.bestmove;
 
-                e.action_list.Add(ConvertToRangerAction(moveTodo));
+                    if (moveTodo == null || moveTodo.actionType == actionEnum.endturn)
+                    {
+                        //simply clear action list, hearthranger bot will endturn if no action can do.
+                        //e.action_list.Clear();
+                        BotAction endturnmove = new HSRangerLib.BotAction();
+                        endturnmove.Type = BotActionType.END_TURN;
+                        e.action_list.Add(endturnmove);
+                        return;
+                    }
+
+                    Helpfunctions.Instance.ErrorLog("play action");
+                    moveTodo.print();
+
+                    e.action_list.Add(ConvertToRangerAction(moveTodo));
+
+                }
+                else
+                {//##########################################################################
+                    //this is used if you can queque multiple actions
+                    //thanks to xytrix
+
+                    this.queuedMoveGuesses.Clear();
+                    this.queuedMoveGuesses.Add(new Playfield());  // prior to any changes, in case HR fails to execute any actions
+                    bool hasMoreActions = false;
+
+                    do
+                    {
+                        Helpfunctions.Instance.ErrorLog("play action...1");
+                        Action moveTodo = Ai.Instance.bestmove;
+
+                        if (!hasMoreActions && (moveTodo == null || moveTodo.actionType == actionEnum.endturn))
+                        {
+                            Helpfunctions.Instance.ErrorLog("enturn");
+                            //simply clear action list, hearthranger bot will endturn if no action can do.
+                            BotAction endturnmove = new HSRangerLib.BotAction();
+                            endturnmove.Type = BotActionType.END_TURN;
+                            e.action_list.Add(endturnmove);
+                            hasMoreActions = false;
+                        }
+                        else
+                        {
+
+                            Helpfunctions.Instance.ErrorLog("play action");
+                            moveTodo.print();
+
+                            BotAction nextMove = ConvertToRangerAction(moveTodo);
+                            if (nextMove == null) return;  // Prevent exceptions for expected errors like missing entityID for new spawned minions
+
+                            e.action_list.Add(nextMove);
+                            this.queuedMoveGuesses.Add(new Playfield(Ai.Instance.nextMoveGuess));
+
+                            hasMoreActions = canQueueNextActions();
+                            if (hasMoreActions) Ai.Instance.doNextCalcedMove();
+                        }
+                    }
+                    while (hasMoreActions);
+
+                    numActionsSent = e.action_list.Count();
+                    Helpfunctions.Instance.ErrorLog("sending HR " + numActionsSent + " queued actions");
+                    numExecsReceived = 0;
+
+                }//##########################################################################
+
+
             }
             catch (Exception Exception)
             {
@@ -475,9 +635,51 @@ namespace HREngine.Bots
 
         public override void OnActionDone(ActionDoneEventArgs e)
         {
-            //do nothing here            
+            //do nothing here
+
+            //queque stuff
+            numExecsReceived++;
+
+            switch (e.done_result)
+            {
+                case ActionDoneEventArgs.ActionResult.Executed:
+                    Helpfunctions.Instance.ErrorLog("HR action " + numExecsReceived + " done <executed>: " + e.action_id); break;
+                case ActionDoneEventArgs.ActionResult.SourceInvalid:
+                    Helpfunctions.Instance.ErrorLog("HR action " + numExecsReceived + " done <invalid_source>: " + e.action_id); break;
+                case ActionDoneEventArgs.ActionResult.TargetInvalid:
+                    Helpfunctions.Instance.ErrorLog("HR action " + numExecsReceived + " done <invalid_target>: " + e.action_id); break;
+            }
+
         }
 
+
+        private bool canQueueNextActions()
+        {
+            if (!Ai.Instance.canQueueNextMoves()) return false;
+
+            // HearthRanger will re-query bestmove after a targeted minion buff. So even though we can queue moves after,
+            // there's no point because we'll just print error messages when HearthRanger ignores them.
+            if (Ai.Instance.bestmove.actionType == actionEnum.playcard)
+            {
+                CardDB.cardName card = Ai.Instance.bestmove.card.card.name;
+
+                if (card == CardDB.cardName.abusivesergeant
+                    || card == CardDB.cardName.darkirondwarf
+                    || card == CardDB.cardName.crueltaskmaster
+                    || card == CardDB.cardName.screwjankclunker
+                    || card == CardDB.cardName.lancecarrier
+                    || card == CardDB.cardName.clockworkknight
+                    || card == CardDB.cardName.shatteredsuncleric
+                    || card == CardDB.cardName.houndmaster
+                    || card == CardDB.cardName.templeenforcer
+                    || card == CardDB.cardName.wildwalker)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
 
         int lossedtodo = 0;
@@ -900,7 +1102,7 @@ namespace HREngine.Bots
 
     public class Silverfish
     {
-        public string versionnumber = "115.0";
+        public string versionnumber = "117.02";
         private bool singleLog = false;
         private string botbehave = "rush";
         public bool waitingForSilver = false;
@@ -952,25 +1154,36 @@ namespace HREngine.Bots
         Minion ownHero;
         Minion enemyHero;
 
-        // NEW VALUES#################################################################################################################
-        // NEW VALUES#################################################################################################################
-        // NEW VALUES#################################################################################################################
+        // NEW VALUES--
 
         int numberMinionsDiedThisTurn = 0;//todo need that value
         int ownCurrentOverload = 0;//todo get them! = number of overloaded Manacrystals for CURRENT turn (NOT RECALL_OWED !)
         int enemyOverload = 0;//todo need that value maybe
         int ownDragonConsort = 0;
         int enemyDragonConsort = 0;
-        int ownLoathebs = 0;
+        int ownLoathebs = 0;// number of loathebs WE PLAYED (so enemy has the buff)
         int enemyLoathebs = 0;
-        int ownMillhouse = 0;
+        int ownMillhouse = 0; // number of millhouse-manastorm WE PLAYED (so enemy has the buff)
         int enemyMillhouse = 0;
         int ownKirintor = 0;
         int enemyKirintor = 0;
         int ownPrepa = 0;
         int enemyPrepa = 0;
 
+        // NEW VALUES#TGT#############################################################################################################
+        // NEW VALUES#################################################################################################################
+        int heroPowerUsesThisTurn = 0;
+        int ownHeroPowerUsesThisGame = 0;
+        int enemyHeroPowerUsesThisGame = 0;
+        int lockandload = 0;
+        int ownsabo=0;//number of saboteurplays  of our player (so enemy has the buff)
+        int enemysabo = 0;//number of saboteurplays  of enemy player (so we have the buff)
+        int ownFenciCoaches = 0; // number of Fencing Coach-debuffs on our player 
 
+        //LOE stuff###############################################################################################################
+        List<CardDB.cardIDEnum> choiceCards = new List<CardDB.cardIDEnum>(); // here we save all available tracking/discover cards ordered from left to right
+        public List<int> choiceCardsEntitys = new List<int>(); //list of entitys same order as choiceCards
+        
         private static HSRangerLib.GameState latestGameState;
 
         private static Silverfish instance;
@@ -1027,7 +1240,7 @@ namespace HREngine.Bots
             }
         }
 
-        public bool updateEverything(HSRangerLib.BotBase rangerbot, Behavior botbase, bool runExtern = false, bool passiveWait = false)
+        public bool updateEverything(HSRangerLib.BotBase rangerbot, Behavior botbase, bool quequeActions, bool runExtern = false, bool passiveWait = false)
         {
 
             Helpfunctions.Instance.ErrorLog("updateEverything");
@@ -1045,7 +1258,7 @@ namespace HREngine.Bots
             getMinions(rangerbot);
             getHandcards(rangerbot);
             getDecks(rangerbot);
-
+            correctSpellpower(rangerbot);
             // send ai the data:
             Hrtprozis.Instance.clearAll();
             Handmanager.Instance.clearAll();
@@ -1060,16 +1273,16 @@ namespace HREngine.Bots
                 if (m.Hp >= 1) this.numOptionPlayedThisTurn += m.numAttacksThisTurn;
             }
 
-            Hrtprozis.Instance.updatePlayer(this.ownMaxMana, this.currentMana, this.cardsPlayedThisTurn, this.numMinionsPlayedThisTurn, this.numOptionPlayedThisTurn, this.ueberladung, ownHero.entitiyID, enemyHero.entitiyID, this.numberMinionsDiedThisTurn, this.ownCurrentOverload, this.enemyOverload);
-            Hrtprozis.Instance.setPlayereffects(this.ownDragonConsort, this.enemyDragonConsort, this.ownLoathebs, this.enemyLoathebs, this.ownMillhouse, this.enemyMillhouse, this.ownKirintor, this.ownPrepa);
+            Hrtprozis.Instance.updatePlayer(this.ownMaxMana, this.currentMana, this.cardsPlayedThisTurn, this.numMinionsPlayedThisTurn, this.numOptionPlayedThisTurn, this.ueberladung, ownHero.entitiyID, enemyHero.entitiyID, this.numberMinionsDiedThisTurn, this.ownCurrentOverload, this.enemyOverload, this.heroPowerUsesThisTurn,this.lockandload);
+            Hrtprozis.Instance.setPlayereffects(this.ownDragonConsort, this.enemyDragonConsort, this.ownLoathebs, this.enemyLoathebs, this.ownMillhouse, this.enemyMillhouse, this.ownKirintor, this.ownPrepa, this.ownsabo, this.enemysabo, this.ownFenciCoaches);
             Hrtprozis.Instance.updateSecretStuff(this.ownSecretList, this.enemySecretCount);
 
 
-            Hrtprozis.Instance.updateOwnHero(this.ownHeroWeapon, this.heroWeaponAttack, this.heroWeaponDurability, this.heroname, this.heroAbility, this.ownAbilityisReady, this.ownHero);
-            Hrtprozis.Instance.updateEnemyHero(this.enemyHeroWeapon, this.enemyWeaponAttack, this.enemyWeaponDurability, this.enemyHeroname, this.enemyMaxMana, this.enemyAbility, this.enemyHero);
+            Hrtprozis.Instance.updateOwnHero(this.ownHeroWeapon, this.heroWeaponAttack, this.heroWeaponDurability, this.heroname, this.heroAbility, this.ownAbilityisReady, this.ownHero, this.ownHeroPowerUsesThisGame);
+            Hrtprozis.Instance.updateEnemyHero(this.enemyHeroWeapon, this.enemyWeaponAttack, this.enemyWeaponDurability, this.enemyHeroname, this.enemyMaxMana, this.enemyAbility, this.enemyHero, this.enemyHeroPowerUsesThisGame);
 
             Hrtprozis.Instance.updateMinions(this.ownMinions, this.enemyMinions);
-            Handmanager.Instance.setHandcards(this.handCards, this.anzcards, this.enemyAnzCards);
+            Handmanager.Instance.setHandcards(this.handCards, this.anzcards, this.enemyAnzCards, this.choiceCards);
 
             Hrtprozis.Instance.updateFatigueStats(this.ownDecksize, this.ownHeroFatigue, this.enemyDecksize, this.enemyHeroFatigue);
 
@@ -1080,26 +1293,69 @@ namespace HREngine.Bots
             Playfield p = new Playfield();
 
 
-
-            if (lastpf != null)
+            if (!quequeActions)
             {
-                if (lastpf.isEqualf(p))
+                if (lastpf != null)
                 {
-                    return false;
-                }
+                    if (lastpf.isEqualf(p))
+                    {
+                        return false;
+                    }
 
-                //board changed we update secrets!
-                //if(Ai.Instance.nextMoveGuess!=null) Probabilitymaker.Instance.updateSecretList(Ai.Instance.nextMoveGuess.enemySecretList);
-                Probabilitymaker.Instance.updateSecretList(p, lastpf);
-                lastpf = p;
+                    //board changed we update secrets!
+                    //if(Ai.Instance.nextMoveGuess!=null) Probabilitymaker.Instance.updateSecretList(Ai.Instance.nextMoveGuess.enemySecretList);
+                    Probabilitymaker.Instance.updateSecretList(p, lastpf);
+                }
             }
             else
             {
-                lastpf = p;
+                //queque stuff 
+                if (lastpf != null)
+                {
+                    bool isSameAsLastUpdate = lastpf.isEqualf(p);
+
+                    if (isSameAsLastUpdate)
+                    {
+                        ((Bot)rangerbot).shouldSendActions = false;  // let the bot know we haven't updated any actions
+                        return false;
+                    }
+
+                    //board changed we update secrets!
+                    //if(Ai.Instance.nextMoveGuess!=null) Probabilitymaker.Instance.updateSecretList(Ai.Instance.nextMoveGuess.enemySecretList);
+                    if (!isSameAsLastUpdate) Probabilitymaker.Instance.updateSecretList(p, lastpf);
+                }
+
             }
 
+
+            lastpf = p;
             p = new Playfield();//secrets have updated :D
             // calculate stuff
+
+            /*foreach (Handmanager.Handcard hc in p.owncards)
+            {
+                Helpfunctions.Instance.ErrorLog("hc playfield" + hc.manacost + " " + hc.getManaCost(p));
+            }*/
+
+            if (quequeActions)
+            {
+                // Detect errors in HearthRanger execution of our last set of actions and try to fix it so we don't
+                // have to re-calculate the entire turn.
+                Bot currentBot = (Bot)rangerbot;
+                if (currentBot.numActionsSent > currentBot.numExecsReceived && !p.isEqualf(Ai.Instance.nextMoveGuess))
+                {
+                    Helpfunctions.Instance.ErrorLog("HR action queue did not complete!");
+                    Helpfunctions.Instance.logg("board state out-of-sync due to action queue!");
+
+                    if (Ai.Instance.restoreBestMoves(p, currentBot.queuedMoveGuesses))
+                    {
+                        Helpfunctions.Instance.logg("rolled back state to replay queued actions.");
+                        Helpfunctions.Instance.ErrorLog("#queue-rollback#");
+                    }
+                }
+            }
+
+
             Helpfunctions.Instance.ErrorLog("calculating stuff... " + DateTime.Now.ToString("HH:mm:ss.ffff"));
             if (runExtern)
             {
@@ -1109,19 +1365,19 @@ namespace HREngine.Bots
                 if (p.isEqual(Ai.Instance.nextMoveGuess, true))
                 {
 
-                    printstuff(rangerbot, false);
+                    printstuff(p, false);
                     Ai.Instance.doNextCalcedMove();
 
                 }
                 else
                 {
-                    printstuff(rangerbot, true);
+                    printstuff(p, true);
                     readActionFile(passiveWait);
                 }
             }
             else
             {
-                printstuff(rangerbot, false);
+                printstuff(p, false);
                 Ai.Instance.dosomethingclever(botbase);
             }
 
@@ -1132,6 +1388,29 @@ namespace HREngine.Bots
 
         private void getHerostuff(HSRangerLib.BotBase rangerbot)
         {
+
+            //TODO GET HERO POWER USES!!!!!!
+            //heroPowerUsesThisTurn = 0;
+            //ownHeroPowerUsesThisGame = 0;
+            //enemyHeroPowerUsesThisGame = 0;
+
+            //reset playerbuffs (thx to xytri)
+            this.enemyMillhouse = 0;
+            this.enemyLoathebs = 0;
+            this.ownDragonConsort = 0;
+            this.ownKirintor = 0;
+            this.ownPrepa = 0;
+            this.lockandload = 0;
+            this.enemysabo = 0;
+            this.ownFenciCoaches = 0;
+            this.ownMillhouse = 0;
+            this.ownLoathebs = 0;
+            this.enemyDragonConsort = 0;
+            this.enemyKirintor = 0;
+            this.enemyPrepa = 0;
+            this.ownsabo = 0;
+
+
             Dictionary<int, Entity> allEntitys = new Dictionary<int, Entity>();
 
             foreach (var item in rangerbot.gameState.GameEntityList)
@@ -1171,8 +1450,8 @@ namespace HREngine.Bots
             this.currentMana = rangerbot.gameState.CurrentMana;
             this.ownMaxMana = rangerbot.gameState.LocalMaxMana;
             this.enemyMaxMana = rangerbot.gameState.RemoteMaxMana;
-            enemySecretCount = rangerbot.EnemySecrets.Count;
-            enemySecretCount = 0;
+            //enemySecretCount = rangerbot.EnemySecrets.Count;
+            //enemySecretCount = 0;
             //count enemy secrets
             enemySecretList.Clear();
 
@@ -1180,8 +1459,7 @@ namespace HREngine.Bots
             {
                 enemySecretList.Add(item.EntityId);
             }
-
-
+            enemySecretCount = enemySecretList.Count;
 
             this.ownSecretList.Clear();
 
@@ -1261,14 +1539,21 @@ namespace HREngine.Bots
                 Entity weapon = rangerbot.EnemyWeapon;
                 this.enemyHeroWeapon = CardDB.Instance.getCardDataFromID(CardDB.Instance.cardIdstringToEnum(weapon.CardId)).name.ToString();
                 this.enemyWeaponAttack = weapon.ATK;
-                this.enemyWeaponDurability = weapon.Durability;
+                this.enemyWeaponDurability = weapon.Durability - weapon.Damage;
             }
 
 
-            //own hero ablity stuff###########################################################
+            //own hero power stuff###########################################################
 
             this.heroAbility = CardDB.Instance.getCardDataFromID(CardDB.Instance.cardIdstringToEnum(ownHeroAbility.CardId));
             this.ownAbilityisReady = (ownHeroAbility.IsExhausted) ? false : true; // if exhausted, ability is NOT ready
+
+            //only because hearthranger desnt give me the data ;_; use the tag HEROPOWER_ACTIVATIONS_THIS_TURN instead! (of own player)
+            //this.heroPowerUsesThisTurn = 10000;
+            //if (this.ownAbilityisReady) this.heroPowerUsesThisTurn = 0;
+            this.heroPowerUsesThisTurn = rangerbot.gameState.HeroPowerActivationsThisTurn;
+            this.ownHeroPowerUsesThisGame = rangerbot.gameState.NumTimesHeroPowerUsedThisGame;
+
             this.enemyAbility = CardDB.Instance.getCardDataFromID(CardDB.Instance.cardIdstringToEnum(rangerbot.EnemyHeroPower.CardId));
 
             //generate Heros
@@ -1355,30 +1640,43 @@ namespace HREngine.Bots
             int enemycontrollerblubb = enemyhero.ControllerId + 1;// controller = 1 or 2, but entity with 1 is the board -> +1
 
             //will not work in Hearthranger!
+
+
             foreach (Entity ent in allEntitys.Values)
             {
                 if (ent.Attached == owncontrollerblubb && ent.Zone == HSRangerLib.TAG_ZONE.PLAY) //1==play
                 {
                     CardDB.cardIDEnum id = CardDB.Instance.cardIdstringToEnum(ent.CardId);
-                    if (id == CardDB.cardIDEnum.NEW1_029t) this.ownMillhouse++;
-                    if (id == CardDB.cardIDEnum.FP1_030e) this.ownLoathebs++;
+                    if (id == CardDB.cardIDEnum.NEW1_029t) this.enemyMillhouse++;//CHANGED!!!!
+                    if (id == CardDB.cardIDEnum.FP1_030e) this.enemyLoathebs++; //CHANGED!!!!
                     if (id == CardDB.cardIDEnum.BRM_018e) this.ownDragonConsort++;
                     if (id == CardDB.cardIDEnum.EX1_612o) this.ownKirintor++;
                     if (id == CardDB.cardIDEnum.EX1_145o) this.ownPrepa++;
+                    if (id == CardDB.cardIDEnum.AT_061e) this.lockandload++;
+                    if (id == CardDB.cardIDEnum.AT_086e) this.enemysabo++;
+                    if (id == CardDB.cardIDEnum.AT_115e) this.ownFenciCoaches++;
+
                 }
 
                 if (ent.Attached == enemycontrollerblubb && ent.Zone == HSRangerLib.TAG_ZONE.PLAY) //1==play
                 {
                     CardDB.cardIDEnum id = CardDB.Instance.cardIdstringToEnum(ent.CardId);
-                    if (id == CardDB.cardIDEnum.NEW1_029t) this.enemyMillhouse++;
-                    if (id == CardDB.cardIDEnum.FP1_030e) this.enemyLoathebs++;
+                    if (id == CardDB.cardIDEnum.NEW1_029t) this.ownMillhouse++; //CHANGED!!!! (enemy has the buff-> we played millhouse)
+                    if (id == CardDB.cardIDEnum.FP1_030e) this.ownLoathebs++; //CHANGED!!!!
                     if (id == CardDB.cardIDEnum.BRM_018e) this.enemyDragonConsort++;
                     // not needef for enemy, because its lasting only for his turn
                     //if (id == CardDB.cardIDEnum.EX1_612o) this.enemyKirintor++;
                     //if (id == CardDB.cardIDEnum.EX1_145o) this.enemyPrepa++;
+                    if (id == CardDB.cardIDEnum.AT_086e) this.ownsabo++;
                 }
 
             }
+            this.lockandload = (rangerbot.gameState.LocalPlayerLockAndLoad)? 1 : 0;
+
+            //saboteur test:
+            if (ownHeroAbility.Cost >= 3) Helpfunctions.Instance.ErrorLog("heroabilitymana " + ownHeroAbility.Cost);
+            if (this.enemysabo == 0 && ownHeroAbility.Cost >= 3) this.enemysabo++;
+            if (this.enemysabo == 1 && ownHeroAbility.Cost >= 8) this.enemysabo++;
 
             //TODO test Bolvar Fordragon but it will be on his card :D
             //Reading new values end################################
@@ -1388,6 +1686,8 @@ namespace HREngine.Bots
         private void getMinions(HSRangerLib.BotBase rangerbot)
         {
             Dictionary<int, Entity> allEntitys = new Dictionary<int, Entity>();
+            
+            //TEST....................
             /*
             Helpfunctions.Instance.ErrorLog("# all");
             foreach (var item in rangerbot.gameState.GameEntityList)
@@ -1466,17 +1766,21 @@ namespace HREngine.Bots
 
                     m.silenced = entitiy.IsSilenced;
 
+                    m.spellpower = entitiy.SpellPower;
+
                     m.charge = 0;
 
                     if (!m.silenced && m.name == CardDB.cardName.southseadeckhand && entitiy.HasCharge) m.charge = 1;
                     if (!m.silenced && m.handcard.card.Charge) m.charge = 1;
-
+                    if (m.charge == 0 && entitiy.HasCharge) m.charge = 1;
                     m.zonepos = zp;
 
                     m.entitiyID = entitiy.EntityId;
 
+                    if(m.name == CardDB.cardName.unknown) Helpfunctions.Instance.ErrorLog("unknown card error");
 
-                    //Helpfunctions.Instance.ErrorLog(  m.name + " ready params ex: " + m.exhausted + " charge: " +m.charge + " attcksthisturn: " + m.numAttacksThisTurn + " playedthisturn " + m.playedThisTurn );
+                    Helpfunctions.Instance.ErrorLog(m.entitiyID + " ." + entitiy.CardId + ". " + m.name + " ready params ex: " + m.exhausted + " charge: " + m.charge + " attcksthisturn: " + m.numAttacksThisTurn + " playedthisturn " + m.playedThisTurn);
+                    //Helpfunctions.Instance.ErrorLog("spellpower check " + entitiy.SpellPowerAttack + " " + entitiy.SpellPowerHealing + " " + entitiy.SpellPower);
 
 
                     List<miniEnch> enchs = new List<miniEnch>();
@@ -1569,6 +1873,46 @@ namespace HREngine.Bots
             setEnchantments(enchantments);*/
         }
 
+        private void correctSpellpower(HSRangerLib.BotBase rangerbot)
+        {
+            int ownspellpower = rangerbot.gameState.LocalPlayerSpellPower;
+            int spellpowerfield = 0;
+            int numberDalaranAspirant=0;
+            foreach (Minion mnn in this.ownMinions)
+            {
+                if(mnn.name == CardDB.cardName.dalaranaspirant) numberDalaranAspirant++;
+                spellpowerfield += mnn.spellpower;
+            }
+            int missingSpellpower = ownspellpower - spellpowerfield;
+            if (missingSpellpower != 0 )
+            {
+                Helpfunctions.Instance.ErrorLog("spellpower correction: " + ownspellpower + " " + spellpowerfield + " " + numberDalaranAspirant);
+            }
+            if (missingSpellpower >= 1 && numberDalaranAspirant >= 1)
+            {
+                //give all dalaran aspirants the "same amount" of spellpower
+                for (int i = 0; i < missingSpellpower; i++)
+                {
+                    Minion dalaranAspriant = null;
+                    int spellpower = ownspellpower;
+
+                    foreach (Minion mnn in this.ownMinions)
+                    {
+                        if (mnn.name == CardDB.cardName.dalaranaspirant)
+                        {
+                            if (spellpower >= mnn.spellpower)
+                            {
+                                spellpower = mnn.spellpower;
+                                dalaranAspriant = mnn;
+                            }
+                        }
+                    }
+                    dalaranAspriant.spellpower++;
+                }
+
+            }
+        }
+
         private void setEnchantments(List<Entity> enchantments)
         {
             /*
@@ -1629,10 +1973,12 @@ namespace HREngine.Bots
                     hc.entity = entitiy.EntityId;
                     hc.manacost = entitiy.Cost;
                     hc.addattack = 0;
-                    if (c.name == CardDB.cardName.bolvarfordragon)
-                    {
-                        hc.addattack = entitiy.ATK - 1; // -1 because it starts with 1, we count only the additional attackvalue
-                    }
+                    //Helpfunctions.Instance.ErrorLog("hc "+ entitiy.ZonePosition + " ." + entitiy.CardId + ". " + entitiy.Cost + "  " + c.name);
+                    int attackchange = entitiy.ATK - c.Attack;
+                    int hpchange = entitiy.Health - c.Health;
+                    hc.addattack = attackchange;
+                    hc.addHp = hpchange;
+
                     handCards.Add(hc);
                     this.anzcards++;
                 }
@@ -1653,6 +1999,21 @@ namespace HREngine.Bots
                 if (ent.ControllerId != this.ownPlayerController && ent.ZonePosition >= 1 && ent.Zone == HSRangerLib.TAG_ZONE.HAND) // enemy handcard
                 {
                     this.enemyAnzCards++;
+                }
+            }
+
+            //search for choice-cards in HR:
+            this.choiceCards.Clear();
+            this.choiceCardsEntitys.Clear();
+            foreach (Entity ent in allEntitys.Values)
+            {
+                if (ent.ControllerId == this.ownPlayerController && ent.Zone == HSRangerLib.TAG_ZONE.SETASIDE) // choice cards are in zone setaside (but thats not all D:)
+                {
+                    if (ent.CardState == ActorStateType.CARD_SELECTABLE) //in HR these cards (setaside + card_selectable) are choice/tracking/discover-cards
+                    {
+                        this.choiceCards.Add(CardDB.Instance.cardIdstringToEnum(ent.CardId));
+                        this.choiceCardsEntitys.Add(ent.EntityId);
+                    }
                 }
             }
 
@@ -1677,7 +2038,7 @@ namespace HREngine.Bots
             {
                 if (ent.Zone == HSRangerLib.TAG_ZONE.SECRET && ent.ControllerId == enemycontroler) continue; // cant know enemy secrets :D
                 if (ent.Zone == HSRangerLib.TAG_ZONE.DECK) continue;
-                if (ent.CardType == HSRangerLib.TAG_CARDTYPE.MINION || ent.CardType == HSRangerLib.TAG_CARDTYPE.WEAPON || ent.CardType == HSRangerLib.TAG_CARDTYPE.ABILITY)
+                if (ent.CardType == HSRangerLib.TAG_CARDTYPE.MINION || ent.CardType == HSRangerLib.TAG_CARDTYPE.WEAPON || ent.CardType == HSRangerLib.TAG_CARDTYPE.SPELL)
                 {
 
                     CardDB.cardIDEnum cardid = CardDB.Instance.cardIdstringToEnum(ent.CardId);
@@ -1730,6 +2091,7 @@ namespace HREngine.Bots
         private void updateBehaveString(Behavior botbase)
         {
             this.botbehave = "rush";
+            if (botbase is BehaviorFace) this.botbehave = "face";
             if (botbase is BehaviorControl) this.botbehave = "control";
             if (botbase is BehaviorMana) this.botbehave = "mana";
             this.botbehave += " " + Ai.Instance.maxwide;
@@ -1820,48 +2182,23 @@ namespace HREngine.Bots
         //    readActionFile();
         //}
 
-        private void printstuff(HSRangerLib.BotBase rangerbot, bool runEx)
+        private void printstuff(Playfield p, bool runEx)
         {
-            Entity ownPlayer = rangerbot.FriendHero;
-            int ownsecretcount = rangerbot.FriendSecrets.Count;
             string dtimes = DateTime.Now.ToString("HH:mm:ss:ffff");
-            string enemysecretIds = "";
-            enemysecretIds = Probabilitymaker.Instance.getEnemySecretData();
-            Helpfunctions.Instance.logg("#######################################################################");
-            Helpfunctions.Instance.logg("#######################################################################");
-            Helpfunctions.Instance.logg("start calculations, current time: " + DateTime.Now.ToString("HH:mm:ss") + " V" + this.versionnumber + " " + this.botbehave);
-            Helpfunctions.Instance.logg("#######################################################################");
-            Helpfunctions.Instance.logg("mana " + currentMana + "/" + ownMaxMana);
-            Helpfunctions.Instance.logg("emana " + enemyMaxMana);
-            Helpfunctions.Instance.logg("own secretsCount: " + ownsecretcount);
-
-            Helpfunctions.Instance.logg("enemy secretsCount: " + enemySecretCount + " ;" + enemysecretIds);
-
-            Ai.Instance.currentCalculatedBoard = dtimes;
+            String completeBoardString = p.getCompleteBoardForSimulating(this.botbehave, this.versionnumber, dtimes);
+            
+            Helpfunctions.Instance.logg(completeBoardString);
 
             if (runEx)
             {
+                Ai.Instance.currentCalculatedBoard = dtimes;
                 Helpfunctions.Instance.resetBuffer();
                 Helpfunctions.Instance.writeBufferToActionFile();
                 Helpfunctions.Instance.resetBuffer();
 
-                Helpfunctions.Instance.writeToBuffer("#######################################################################");
-                Helpfunctions.Instance.writeToBuffer("#######################################################################");
-                Helpfunctions.Instance.writeToBuffer("start calculations, current time: " + dtimes + " V" + this.versionnumber + " " + this.botbehave);
-                Helpfunctions.Instance.writeToBuffer("#######################################################################");
-                Helpfunctions.Instance.writeToBuffer("mana " + currentMana + "/" + ownMaxMana);
-                Helpfunctions.Instance.writeToBuffer("emana " + enemyMaxMana);
-                Helpfunctions.Instance.writeToBuffer("own secretsCount: " + ownsecretcount);
-                Helpfunctions.Instance.writeToBuffer("enemy secretsCount: " + enemySecretCount + " ;" + enemysecretIds);
+                Helpfunctions.Instance.writeToBuffer(completeBoardString);
+                Helpfunctions.Instance.writeBufferToFile();
             }
-            Hrtprozis.Instance.printHero(runEx);
-            Hrtprozis.Instance.printOwnMinions(runEx);
-            Hrtprozis.Instance.printEnemyMinions(runEx);
-            Handmanager.Instance.printcards(runEx);
-            Probabilitymaker.Instance.printTurnGraveYard(runEx);
-            Probabilitymaker.Instance.printGraveyards(runEx);
-
-            if (runEx) Helpfunctions.Instance.writeBufferToFile();
 
         }
 
@@ -1872,6 +2209,8 @@ namespace HREngine.Bots
             float value = 0f;
             string boardnumm = "-1";
             this.waitingForSilver = true;
+            int trackingchoice = 0;
+            int trackingstate = 0;
             while (readed)
             {
                 try
@@ -1905,6 +2244,16 @@ namespace HREngine.Bots
                             value = float.Parse((first.Split(' ')[1].Split(' ')[0]));
                             alist.RemoveAt(0);
                         }
+
+                        first = alist[0];
+
+                        if (first.StartsWith("discover "))
+                        {
+                            string trackingstuff = first.Replace("discover ", "");
+                            trackingchoice = Convert.ToInt32(trackingstuff.Split(',')[0]);
+                            trackingstate = Convert.ToInt32(trackingstuff.Split(',')[1]);
+                            alist.RemoveAt(0);
+                        }
                         readed = false;
                     }
                     else
@@ -1935,7 +2284,7 @@ namespace HREngine.Bots
                 Helpfunctions.Instance.logg(a);
             }
 
-            Ai.Instance.setBestMoves(aclist, value);
+            Ai.Instance.setBestMoves(aclist, value, trackingchoice, trackingstate);
 
             return true;
         }
@@ -2056,6 +2405,7 @@ namespace HREngine.Bots
         {
             bool writed = true;
             this.sendbuffer += "<EoF>";
+            //this.ErrorLog("write to crrntbrd file: " + sendbuffer);
             while (writed)
             {
                 try
@@ -2075,7 +2425,7 @@ namespace HREngine.Bots
         {
             bool writed = true;
             this.sendbuffer += "<EoF>";
-            this.ErrorLog("write to action file: "+ sendbuffer);
+            //this.ErrorLog("write to action file: "+ sendbuffer);
             while (writed)
             {
                 try

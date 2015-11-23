@@ -13,21 +13,14 @@ namespace HREngine.Bots
 		{
             int dmg = (ownplay) ? p.getSpellDamageDamage(4) : p.getEnemySpellDamageDamage(4);
             p.minionGetDamageOrHeal(target, dmg);
-            if (ownplay)
+
+            if (p.isServer)
             {
-                p.owncarddraw -= Math.Min(1, p.owncards.Count);
-                p.owncards.RemoveRange(0, Math.Min(1, p.owncards.Count));
-                p.triggerCardsChanged(true);
+                p.discardRandomCard_SERVER(ownplay);
+                return;
             }
-            else
-            {
-                if (p.enemyAnzCards >= 1)
-                {
-                    p.enemycarddraw--;
-                    p.enemyAnzCards--;
-                    p.triggerCardsChanged(false);
-                }
-            }
+
+            p.disCardACard(ownplay);
 		}
 
 	}

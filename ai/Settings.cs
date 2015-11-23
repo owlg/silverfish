@@ -45,6 +45,8 @@ namespace HREngine.Bots
             this.useExternalProcess = false; // use silver.exe for calculations a lot faster than turning it off (true = recomended)
             this.passiveWaiting = false; // process will wait passive for silver.exe to finish
 
+            this.speedy = false; // process will wait passive for silver.exe to finish
+
             //###########################################################
 
             applySettings();
@@ -89,12 +91,13 @@ namespace HREngine.Bots
 
         public bool useExternalProcess = false;
         public bool passiveWaiting = false;
+        public bool speedy = false;
 
         public int alpha = 50;
         public float firstweight = 0.5f;
         public float secondweight = 0.5f;
 
-        public int numberOfThreads = 32;
+        public int numberOfThreads = Environment.ProcessorCount;//32;//
         public bool useSecretsPlayArround = false;
 
         public bool simulatePlacement = true;
@@ -445,8 +448,38 @@ namespace HREngine.Bots
                     if (a.StartsWith("control")) returnbehav = new BehaviorControl();
                     if (a.StartsWith("rush")) returnbehav = new BehaviorRush();
                     if (a.StartsWith("mana")) returnbehav = new BehaviorMana();
-
+                    if (a.StartsWith("face")) returnbehav = new BehaviorFace();
                 }
+
+                searchword = "concedeonbadboard=";
+                if (s.StartsWith(searchword))
+                {
+                    string a = s.Replace(searchword, "");
+                    try
+                    {
+                        this.enemyConcede = Convert.ToBoolean(a);
+                    }
+                    catch
+                    {
+                        Helpfunctions.Instance.ErrorLog("ignoring the setting " + searchword);
+                    }
+                }
+
+                searchword = "speed=";
+                if (s.StartsWith(searchword))
+                {
+                    string a = s.Replace(searchword, "");
+                    try
+                    {
+                        this.speedy = Convert.ToBoolean(a);
+                    }
+                    catch
+                    {
+                        Helpfunctions.Instance.ErrorLog("ignoring the setting " + searchword);
+                    }
+                }
+
+                
 
             }
             //foreach ended----------

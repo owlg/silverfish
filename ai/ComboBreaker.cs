@@ -398,7 +398,8 @@
             Helpfunctions.Instance.ErrorLog("read _combo.txt...");
             foreach (string line in lines)
             {
-
+                string shortline = line.Replace(" ", "");
+                if(shortline.StartsWith("//")) continue;
                 if (line.Contains("weapon:"))
                 {
                     try
@@ -488,7 +489,7 @@
             int mana = Math.Max(hp.ownMaxMana, hp.currentMana);
             foreach (Action a in alist)
             {
-                if (a.actionType != actionEnum.playcard) continue;
+                if (a.actionType != actionEnum.playcard && a.actionType != actionEnum.useHeroPower) continue;
                 CardDB.Card crd = a.card.card;
                 //playedcards.Add(a.handcard);
                 foreach (combo c in this.combos)

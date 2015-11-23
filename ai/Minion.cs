@@ -22,6 +22,7 @@
     {
         //dont silence----------------------------
         public int anzGotDmg = 0;
+        public int gotDmgRaw = 0;
         public bool isHero = false;
         public bool own;
 
@@ -39,6 +40,7 @@
 
         //---------------------------------------
         public bool shadowmadnessed = false;//´can be silenced :D
+        public bool canAttackNormal = false;
 
         public int ancestralspirit = 0;
         public bool destroyOnOwnTurnStart = false; // depends on own!
@@ -49,8 +51,11 @@
         public bool concedal = false;
         public int souloftheforest = 0;
 
+        public int explorersHat = 0;
         public int ownBlessingOfWisdom = 0;
         public int enemyBlessingOfWisdom = 0;
+        public int ownPowerWordGlory = 0;
+        public int enemyPowerWordGlory = 0;
         public int spellpower = 0;
 
         public bool cantBeTargetedBySpellsOrHeroPowers = false;
@@ -81,6 +86,8 @@
 
         public bool silenced = false;
 
+        public List<int> deathrattles = new List<int>();//we might have to use this for unearthed raptor
+
         public Minion()
         {
             this.handcard = new Handmanager.Handcard();
@@ -90,9 +97,10 @@
         {
             //dont silence----------------------------
             this.anzGotDmg = m.anzGotDmg;
+            this.gotDmgRaw = m.gotDmgRaw;
             this.isHero = m.isHero;
             this.own = m.own;
-
+            this.canAttackNormal = m.canAttackNormal;
             this.name = m.name;
             this.handcard = m.handcard;//new?
             this.entitiyID = m.entitiyID;
@@ -117,8 +125,12 @@
             this.concedal = m.concedal;
             this.souloftheforest = m.souloftheforest;
 
+            this.explorersHat = m.explorersHat;
+
             this.ownBlessingOfWisdom = m.ownBlessingOfWisdom;
             this.enemyBlessingOfWisdom = m.enemyBlessingOfWisdom;
+            this.ownPowerWordGlory = m.ownPowerWordGlory;
+            this.enemyPowerWordGlory = m.enemyPowerWordGlory;
             this.spellpower = m.spellpower;
 
             this.Hp = m.Hp;
@@ -146,15 +158,24 @@
             this.cantLowerHPbelowONE = m.cantLowerHPbelowONE;
 
             this.silenced = m.silenced;
+            if (m.deathrattles != null)
+            {
+                this.deathrattles = new List<int>();
+                foreach (int dr in m.deathrattles)
+                {
+                    this.deathrattles.Add(dr);  
+                }
+            }
         }
 
         public void setMinionTominion(Minion m)
         {
             //dont silence----------------------------
             this.anzGotDmg = m.anzGotDmg;
+            this.gotDmgRaw = m.gotDmgRaw;
             this.isHero = m.isHero;
             this.own = m.own;
-
+            this.canAttackNormal = m.canAttackNormal;
             this.name = m.name;
             this.handcard = m.handcard;//new?
             //this.entitiyID = m.entitiyID;
@@ -179,8 +200,12 @@
             this.concedal = m.concedal;
             this.souloftheforest = m.souloftheforest;
 
+            this.explorersHat = m.explorersHat;
+
             this.ownBlessingOfWisdom = m.ownBlessingOfWisdom;
             this.enemyBlessingOfWisdom = m.enemyBlessingOfWisdom;
+            this.ownPowerWordGlory = m.ownPowerWordGlory;
+            this.enemyPowerWordGlory = m.enemyPowerWordGlory;
             this.spellpower = m.spellpower;
 
             this.Hp = m.Hp;
@@ -208,6 +233,15 @@
             this.cantLowerHPbelowONE = m.cantLowerHPbelowONE;
 
             this.silenced = m.silenced;
+
+            if (m.deathrattles != null)
+            {
+                this.deathrattles = new List<int>();
+                foreach (int dr in m.deathrattles)
+                {
+                    this.deathrattles.Add(dr);
+                }
+            }
         }
 
         public int getRealAttack()
@@ -229,11 +263,31 @@
                     //if (dmg < 0) return;
 
                     //heal
+                    bool BolfRamshield = false;
+                    if (dmg > 0)
+                    {
 
-                    this.Hp = Math.Min(30, this.Hp - dmg);
+                        foreach (Minion m in (this.own) ? p.ownMinions : p.enemyMinions)
+                        {
+                            if (m.name == CardDB.cardName.bolframshield)
+                            {
+                                BolfRamshield = true;
+                                m.getDamageOrHeal(dmg, p, isMinionAttack, dontCalcLostDmg);
+                            }
+                        }
+                    }
+
+                    if (!BolfRamshield)
+                    {
+                        this.Hp = Math.Min(30, this.Hp - dmg);
+                    }
                     if (copy < this.Hp)
                     {
                         p.tempTrigger.charsGotHealed++;
+                        if (this.own)
+                        {
+                            p.tempTrigger.owncharsGotHealed++;
+                        }
                     }
                     if (copy - this.Hp >= 1)
                     {
@@ -248,8 +302,20 @@
                         int rest = this.armor - dmg;
                         if (rest < 0)
                         {
-                            this.Hp += rest;
-                            p.secretTrigger_HeroGotDmg(this.own, rest);
+                            bool BolfRamshield = false;
+                            foreach (Minion m in (this.own) ? p.ownMinions : p.enemyMinions)
+                            {
+                                if (m.name == CardDB.cardName.bolframshield)
+                                {
+                                    BolfRamshield = true;
+                                    m.getDamageOrHeal(-rest, p, isMinionAttack, dontCalcLostDmg);
+                                }
+                            }
+                            if (!BolfRamshield)
+                            {
+                                this.Hp += rest;
+                                p.secretTrigger_HeroGotDmg(this.own, rest);
+                            }
                         }
                         this.armor = Math.Max(0, this.armor - dmg);
 
@@ -260,7 +326,16 @@
 
                 if (this.Hp < copy)
                 {
+                    if (this.own)
+                    {
+                        p.tempTrigger.ownHeroGotDmg++;
+                    }
+                    else
+                    {
+                        p.tempTrigger.enemyHeroGotDmg++;
+                    }
                     this.anzGotDmg++;
+                    this.gotDmgRaw += dmg;
                 }
                 return;
             }
@@ -333,6 +408,11 @@
                 //minionWasHealed
                 p.tempTrigger.minionsGotHealed++;
                 p.tempTrigger.charsGotHealed++;
+                if (this.own)
+                {
+                    p.tempTrigger.ownMinionsGotHealed++;
+                    p.tempTrigger.owncharsGotHealed++;
+                }
             }
 
             if (this.Hp < hpcopy)
@@ -345,7 +425,9 @@
                 {
                     p.tempTrigger.enemyMinionsGotDmg++;
                 }
+
                 this.anzGotDmg++;
+                this.gotDmgRaw += dmg;
             }
 
             if (this.maxHp == this.Hp)
@@ -394,21 +476,21 @@
                 if (this.name == CardDB.cardName.feugen) p.feugenDead = true;
             }
 
-            
+
 
             if (own)
             {
 
                 p.tempTrigger.ownMinionsDied++;
-                if (this.handcard.card.race == 20)
+                if (this.handcard.card.race == TAG_RACE.PET)
                 {
                     p.tempTrigger.ownBeastDied++;
                 }
-                if (this.handcard.card.race == 17)
+                if (this.handcard.card.race == TAG_RACE.MECHANICAL)
                 {
                     p.tempTrigger.ownMechanicDied++;
                 }
-                if (this.handcard.card.race == 14)
+                if (this.handcard.card.race == TAG_RACE.MURLOC)
                 {
                     p.tempTrigger.ownMurlocDied++;
                 }
@@ -416,15 +498,15 @@
             else
             {
                 p.tempTrigger.enemyMinionsDied++;
-                if (this.handcard.card.race == 20)
+                if (this.handcard.card.race == TAG_RACE.PET)
                 {
                     p.tempTrigger.enemyBeastDied++;
                 }
-                if (this.handcard.card.race == 17)
+                if (this.handcard.card.race == TAG_RACE.MECHANICAL)
                 {
                     p.tempTrigger.enemyMechanicDied++;
                 }
-                if (this.handcard.card.race == 14)
+                if (this.handcard.card.race == TAG_RACE.MURLOC)
                 {
                     p.tempTrigger.enemyMurlocDied++;
                 }
@@ -448,10 +530,25 @@
                 return;
             }
 
-            if (!silenced && (name == CardDB.cardName.ragnarosthefirelord || name == CardDB.cardName.ancientwatcher)) return;
+            if (!silenced && (name == CardDB.cardName.ragnarosthefirelord || name == CardDB.cardName.ancientwatcher || (name == CardDB.cardName.argentwatchman && !this.canAttackNormal))) return;
 
-            if (!frozen && ((charge >= 1 && playedThisTurn) || !playedThisTurn || shadowmadnessed) && (numAttacksThisTurn == 0 || (numAttacksThisTurn == 1 && windfury) || ( !silenced && this.name == CardDB.cardName.v07tr0n && numAttacksThisTurn <=3 )) ) Ready = true;
+            if (!frozen && ((charge >= 1 && playedThisTurn) || !playedThisTurn || shadowmadnessed) && (numAttacksThisTurn == 0 || (numAttacksThisTurn == 1 && windfury) || (!silenced && this.name == CardDB.cardName.v07tr0n && numAttacksThisTurn <= 3))) Ready = true;
 
+        }
+
+        public void endAura(Playfield p)
+        {
+            if(!this.silenced) this.handcard.card.sim_card.onAuraEnds(p, this);
+
+            if (this.own)
+            {
+                p.spellpower -= this.spellpower;
+            }
+            else
+            {
+                p.enemyspellpower -= this.spellpower;
+            }
+            this.spellpower = 0;
         }
 
         public void becomeSilence(Playfield p)
@@ -467,6 +564,10 @@
             souloftheforest = 0;
             ownBlessingOfWisdom = 0;
             enemyBlessingOfWisdom = 0;
+            ownPowerWordGlory = 0;
+            enemyPowerWordGlory = 0;
+
+            explorersHat = 0;
 
             cantBeTargetedBySpellsOrHeroPowers = false;
 
@@ -479,7 +580,7 @@
             immune = false;
             poisonous = false;
             cantLowerHPbelowONE = false;
-
+            if(this.deathrattles!=null) this.deathrattles.Clear();
 
             if (own) p.spellpower -= spellpower;
             else p.enemyspellpower -= spellpower;
@@ -528,23 +629,73 @@
             }
         }
 
+        public bool hasDeathrattle()
+        {
+            if (this.deathrattles == null || this.deathrattles.Count == 0) return false;
+            return true;
+        }
+
         public void loadEnchantments(List<miniEnch> enchants, int ownPlayerControler)
         {
+            bool correctSpellPower = false;
+            int spellpowerbuffs = 0;
             foreach (miniEnch me in enchants)
             {
+
+                if (me.CARDID == CardDB.cardIDEnum.LOE_105e) //explorersHat
+                {
+                    this.explorersHat++;
+                }
+
+
+                if (me.CARDID == CardDB.cardIDEnum.AT_132_DRUIDe) //Claws better
+                {
+                    this.tempAttack += 2;
+                }
+
+                if (me.CARDID == CardDB.cardIDEnum.AT_013e) //power word: glory
+                {
+                    if (me.controllerOfCreator == ownPlayerControler)
+                    {
+                        this.ownPowerWordGlory++;
+                    }
+                    else
+                    {
+                        this.enemyPowerWordGlory++;
+                    }
+                }
+
+                if (me.CARDID == CardDB.cardIDEnum.AT_109e)
+                {
+                    this.canAttackNormal = true;
+                }
+
+                if (me.CARDID == CardDB.cardIDEnum.AT_039e) //Claw
+                {
+                    this.tempAttack += 2;
+                }
                 // deathrattles reborns and destoyings----------------------------------------------
+
+
                 if (me.CARDID == CardDB.cardIDEnum.CS2_038e) //ancestral spirit
                 {
                     this.ancestralspirit++;
                 }
+
+                //spellpower is now readed in m.spellpower = entity.getTag(SPELLPOWER)!
                 if (me.CARDID == CardDB.cardIDEnum.EX1_584e) //ancient mage
                 {
-                    this.spellpower++;
+                    //this.spellpower++;
+                    correctSpellPower = true;
+                    spellpowerbuffs++;
                 }
                 if (me.CARDID == CardDB.cardIDEnum.GVG_010b) //Velen's Chosen (+2+4, +spellpower)
                 {
-                    this.spellpower++;
+                    //this.spellpower++;
+                    correctSpellPower = true;
+                    spellpowerbuffs++;
                 }
+
                 if (me.CARDID == CardDB.cardIDEnum.EX1_158e) //soul of the forest
                 {
                     this.souloftheforest++;
@@ -582,6 +733,8 @@
                         this.enemyBlessingOfWisdom++;
                     }
                 }
+
+
 
                 if (me.CARDID == CardDB.cardIDEnum.DREAM_05e) //nightmare
                 {
@@ -625,6 +778,7 @@
                 {
                     //todo Eure Zauber kosten in diesem Zug (5) mehr.
                 }
+
                 if (me.CARDID == CardDB.cardIDEnum.NEW1_029t) //death to millhouse!
                 {
                     // todo spells cost (0) this turn!
@@ -633,15 +787,22 @@
                 {
                     // todo Your next Secret costs (0).
                 }
-                if (me.CARDID == CardDB.cardIDEnum.EX1_084e) //warsongcommander
+
+                /*if (me.CARDID == CardDB.cardIDEnum.EX1_084e) //warsongcommander
                 {
                     this.charge++;
-                }
+                }*/
+
                 if (me.CARDID == CardDB.cardIDEnum.DS1_178e) //rhino
                 {
                     this.charge++;
                 }
                 if (me.CARDID == CardDB.cardIDEnum.CS2_103e2)// sturmangriff    +2 angriff und ansturm/.
+                {
+                    this.charge++;
+                }
+
+                if (me.CARDID == CardDB.cardIDEnum.AT_071e)// sturmangriff    +1 angriff und ansturm/.
                 {
                     this.charge++;
                 }
@@ -694,6 +855,7 @@
                 {
                     this.tempAttack += 1;
                 }
+
                 if (me.CARDID == CardDB.cardIDEnum.EX1_549o) //bestial wrath
                 {
                     this.tempAttack += 2;
@@ -703,6 +865,9 @@
                 {
                     this.tempAttack += 2;
                 }
+
+
+
                 if (me.CARDID == CardDB.cardIDEnum.GVG_011a) //Shrink Ray
                 {
                     this.tempAttack -= 2; //todo might not be correct
@@ -712,6 +877,21 @@
                     this.tempAttack += 2;
                 }
             }
+
+            if (correctSpellPower)
+            {
+                //TODO add the mission spellpower of that new insprire minion, but we need the (correct)spellpower of the player for that
+                this.spellpower = 0;
+                if (spellpowerbuffs >= 1)
+                {
+                    this.spellpower += spellpowerbuffs; //one is counted!
+                }
+                if (!this.silenced)
+                {
+                    this.spellpower += this.handcard.card.spellpowervalue;
+                }
+            }
+
         }
 
     }

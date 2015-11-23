@@ -10,21 +10,14 @@ namespace HREngine.Bots
 //    kampfschrei:/ werft eine zufällige karte ab.
 		public override void getBattlecryEffect(Playfield p, Minion own, Minion target, int choice)
 		{
-            if (own.own)
+
+            if (p.isServer)
             {
-                p.owncarddraw -= Math.Min(1, p.owncards.Count);
-                p.owncards.RemoveRange(0, Math.Min(1, p.owncards.Count));
-                p.triggerCardsChanged(true);
+                p.discardRandomCard_SERVER(own.own);
+                return;
             }
-            else
-            {
-                if (p.enemyAnzCards >= 1)
-                {
-                    p.enemycarddraw--;
-                    p.enemyAnzCards--;
-                    p.triggerCardsChanged(false);
-                }
-            }
+
+            p.disCardACard(own.own);
 		}
 
 	}

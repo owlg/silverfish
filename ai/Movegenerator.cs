@@ -21,15 +21,54 @@
         }
 
 
-        public List<Action> doAllChoices(Playfield p, Handmanager.Handcard hc, bool lethalcheck, bool usePenalityManager)
+        public List<Action> doAllChoices(Playfield p, Handmanager.Handcard hcc, bool lethalcheck, bool usePenalityManager, int tracing = 0)
         {
+            int tracking = tracing;
             List<Action> returnlist = new List<Action>();
-
+            Handmanager.Handcard hc = hcc;
             if (hc.card.type == CardDB.cardtype.MOB && p.ownMinions.Count >= 7) return returnlist;
 
-            for (int i = 1; i < 3; i++)
+            int max = 3;
+            if (hc.card.cardIDenum == CardDB.cardIDEnum.AT_132_SHAMAN) max = 5;
+            if (hc.isChoiceTemp) max = Handmanager.Instance.getNumberChoices() + 1;
+            
+            for (int j = 1; j < max; j++)
             {
+                int i = j;
                 CardDB.Card c = hc.card;
+                int basemana = hc.manacost;
+                if (c.cardIDenum == CardDB.cardIDEnum.AT_132_SHAMAN)
+                {
+                    if (i == 1)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_132_SHAMANa);
+                    }
+                    if (i == 2)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_132_SHAMANb);
+                    }
+                    if (i == 3)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_132_SHAMANc);
+                    }
+                    if (i == 4)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_132_SHAMANd);
+                    }
+                }
+
+                if (c.name == CardDB.cardName.darkwispers)
+                {
+                    if (i == 1)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.GVG_041a);
+                    }
+                    if (i == 2)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.GVG_041b);
+                    }
+                }
+
                 if (c.name == CardDB.cardName.keeperofthegrove)
                 {
                     if (i == 1)
@@ -82,11 +121,11 @@
 
                     if (i == 1)
                     {
-                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.EX1_178a);
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.EX1_178b);
                     }
                     if (i == 2)
                     {
-                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.EX1_178b);
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.EX1_178a);
                     }
                 }
                 if (c.name == CardDB.cardName.druidoftheclaw)
@@ -157,8 +196,48 @@
                         c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.EX1_154b);
                     }
                 }
+                if (c.name == CardDB.cardName.livingroots)
+                {
+                    if (i == 1)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_037a);
+                    }
+                    if (i == 2)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_037b);
+                    }
+                }
+                if (c.name == CardDB.cardName.druidofthesaber)
+                {
+                    if (i == 1)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_042a);
+                    }
+                    if (i == 2)
+                    {
+                        c = CardDB.Instance.getCardDataFromID(CardDB.cardIDEnum.AT_042b);
+                    }
+                }
 
-                if (c.canplayCard(p, hc.manacost))
+                if (hcc.isChoiceTemp)
+                {
+                    i = 0;//its not a druid-choice
+                    tracking = j;
+                    hc = Handmanager.Instance.getCardChoice(tracking - 1);
+                    c = hc.card;
+                    //the tracking/discover card is a druid-choice-card himself :D
+                    if (c.choice)
+                    {
+                        //Helpfunctions.Instance.ErrorLog("choice tracking " + c.name);
+                        Handmanager.Handcard hccc = Handmanager.Instance.getCardChoice(tracking - 1);
+                        returnlist.AddRange(doAllChoices( p, hccc, lethalcheck, usePenalityManager, tracking));
+                        continue;
+                    }
+                    
+                    basemana = c.cost;
+                }
+
+                if (c.canplayCard(p, basemana))
                 {
 
                     int bestplace = p.getBestPlace(c, lethalcheck);
@@ -170,13 +249,13 @@
 
                         if (usePenalityManager)
                         {
-                            cardplayPenality = pen.getPlayCardPenality(hc.card, null, p, i, lethalcheck);
+                            cardplayPenality = pen.getPlayCardPenality(hc, null, p, i, lethalcheck);
                             if (cardplayPenality <= 499)
                             {
                                 //help.logg(hc.card.name + " is played");
                                 //pf.playCard(hc, hc.position - 1, hc.entity, -1, -1, i, bestplace, cardplayPenality);
                                 // i is the choice
-                                Action a = new Action(actionEnum.playcard, hc, null, bestplace, null, cardplayPenality, i);
+                                Action a = new Action(actionEnum.playcard, hc, null, bestplace, null, cardplayPenality, i , tracking);
                                 //pf.playCard(hc, hc.position - 1, hc.entity, -1, -1, 0, bestplace, cardplayPenality);
                                 returnlist.Add(a);
                             }
@@ -185,7 +264,7 @@
                         {
                             //pf.playCard(hc, hc.position - 1, hc.entity, -1, -1, i, bestplace, cardplayPenality);
 
-                            Action a = new Action(actionEnum.playcard, hc, null, bestplace, null, cardplayPenality, i);
+                            Action a = new Action(actionEnum.playcard, hc, null, bestplace, null, cardplayPenality, i , tracking);
                             returnlist.Add(a);
                         }
 
@@ -197,14 +276,14 @@
 
                             if (usePenalityManager)
                             {
-                                cardplayPenality = pen.getPlayCardPenality(hc.card, trgt, p, i, lethalcheck);
+                                cardplayPenality = pen.getPlayCardPenality(hc, trgt, p, i, lethalcheck);
 
                                 if (cardplayPenality <= 499)
                                 {
                                     //help.logg(hc.card.name + " is played");
                                     //pf.playCard(hc, hc.position - 1, hc.entity, trgt.target, trgt.targetEntity, i, bestplace, cardplayPenality);
 
-                                    Action a = new Action(actionEnum.playcard, hc, null, bestplace, trgt, cardplayPenality, i); //i is the choice
+                                    Action a = new Action(actionEnum.playcard, hc, null, bestplace, trgt, cardplayPenality, i , tracking); //i is the choice
                                     returnlist.Add(a);
                                 }
                             }
@@ -212,7 +291,7 @@
                             {
                                 //pf.playCard(hc, hc.position - 1, hc.entity, trgt.target, trgt.targetEntity, i, bestplace, cardplayPenality);
 
-                                Action a = new Action(actionEnum.playcard, hc, null, bestplace, trgt, cardplayPenality, i); //i is the choice
+                                Action a = new Action(actionEnum.playcard, hc, null, bestplace, trgt, cardplayPenality, i , tracking); //i is the choice
                                 returnlist.Add(a);
                             }
 
@@ -246,7 +325,8 @@
             bool useplacement = Settings.Instance.simulatePlacement && p.turnCounter == 0 && p.ownMinions.Count >= 2;
             foreach (Minion hc in p.ownMinions)
             {
-                if (hc.handcard.card.name == CardDB.cardName.direwolfalpha || hc.handcard.card.name == CardDB.cardName.flametonguetotem || hc.handcard.card.name == CardDB.cardName.defenderofargus)
+                //if direwolf or flametongue is on our side, we do calculate correct placement (if activated)
+                if (hc.handcard.card.name == CardDB.cardName.direwolfalpha || hc.handcard.card.name == CardDB.cardName.flametonguetotem )
                 {
                     superplacement = true;
                     break;
@@ -261,7 +341,7 @@
                 if (playedcards.Contains(c.name)) continue; // dont play the same card in one loop
                 playedcards.Add(c.name);
 
-                if (c.choice)
+                if (c.choice || hc.isChoiceTemp)
                 {
                     ret.AddRange(this.doAllChoices(p, hc, isLethalCheck, usePenalityManager));
                 }
@@ -300,19 +380,20 @@
 
                             if (usePenalityManager)
                             {
-                                cardplayPenality = pen.getPlayCardPenality(c, null, p, 0, isLethalCheck);
+                                cardplayPenality = pen.getPlayCardPenality(hc, null, p, 0, isLethalCheck);
                                 if (cardplayPenality <= 499)
                                 {
 
-                                    if (useplacement && ((hc.card.name == CardDB.cardName.direwolfalpha || hc.card.name == CardDB.cardName.flametonguetotem || hc.card.name == CardDB.cardName.defenderofargus) || (superplacement && hc.card.type == CardDB.cardtype.MOB)))
+                                    if (useplacement && ((hc.card.name == CardDB.cardName.direwolfalpha || hc.card.name == CardDB.cardName.flametonguetotem || hc.card.name == CardDB.cardName.defenderofargus || hc.card.name == CardDB.cardName.voidterror) || (superplacement && hc.card.type == CardDB.cardtype.MOB)))
                                     {
                                         int adding = 1;
                                         int subbing = 0;
                                         if (hc.card.name == CardDB.cardName.direwolfalpha || hc.card.name == CardDB.cardName.flametonguetotem)//|| hc.card.name == CardDB.cardName.defenderofargus)
                                         {
                                             adding = 2;
-                                            subbing = 2;
+                                            subbing = 1;
                                         }
+                                        //Helpfunctions.Instance.ErrorLog(adding + " " + subbing + " " + p.ownMinions.Count);
                                         for (int placer = 0; placer < p.ownMinions.Count - subbing; placer++)
                                         {
                                             Action a = new Action(actionEnum.playcard, hc, null, placer + adding, null, cardplayPenality, 0);
@@ -347,7 +428,7 @@
 
                                 if (usePenalityManager)
                                 {
-                                    cardplayPenality = pen.getPlayCardPenality(c, trgt, p, 0, isLethalCheck);
+                                    cardplayPenality = pen.getPlayCardPenality(hc, trgt, p, 0, isLethalCheck);
                                     if (cardplayPenality <= 499)
                                     {
                                         //pf.playCard(hc, hc.position - 1, hc.entity, trgt.target, trgt.targetEntity, 0, bestplace, cardplayPenality);
@@ -430,7 +511,7 @@
 
                     //help.logg(m.name + " is going to attack!");
                     List<Minion> trgts = p.getAttackTargets(true);
-
+                    
 
                     if (isLethalCheck)// only target enemy hero during Lethal check!
                     {
@@ -457,7 +538,10 @@
 
                     foreach (Minion trgt in trgts)
                     {
-
+                        if (!m.silenced && m.name == CardDB.cardName.icehowl && trgt.isHero)
+                        {
+                            continue; //this minion cant attack heros!
+                        }
 
                         int attackPenality = 0;
 
@@ -487,7 +571,7 @@
                         break;
                     }
 
-                    if (!attackordermatters) break;
+                    if (!attackordermatters && !m.stealth) break;
                 }
 
             }
@@ -537,11 +621,12 @@
 
             // use ability
             /// TODO check if ready after manaup
-            if (p.ownAbilityReady && p.mana >= 2 && p.ownHeroAblility.card.canplayCard(p, 2))
+            if (p.ownAbilityReady && p.ownHeroAblility.card.canplayCard(p, 2))
             {
                 int abilityPenality = 0;
                 // if we have mage or priest, we have to target something####################################################
-                if (p.ownHeroAblility.card.cardIDenum == CardDB.cardIDEnum.CS2_034 || p.ownHeroAblility.card.cardIDenum == CardDB.cardIDEnum.CS1h_001 || p.ownHeroAblility.card.cardIDenum == CardDB.cardIDEnum.EX1_625t || p.ownHeroAblility.card.cardIDenum == CardDB.cardIDEnum.EX1_625t2 || p.ownHeroAblility.card.cardIDenum == CardDB.cardIDEnum.DS1h_292)
+
+                if (pen.TargetAbilitysDatabase.ContainsKey(p.ownHeroAblility.card.cardIDenum))
                 {
                     List<Minion> trgts = p.ownHeroAblility.card.getTargetsForCard(p);
                     if (isLethalCheck && (p.ownHeroName == HeroEnum.mage || (p.ownHeroName == HeroEnum.priest && (p.ownHeroAblility.card.name != CardDB.cardName.lesserheal || (p.ownHeroAblility.card.name == CardDB.cardName.lesserheal && p.anzOwnAuchenaiSoulpriest >= 1)))))// only target enemy hero during Lethal check!
@@ -570,7 +655,7 @@
 
                         if (usePenalityManager)
                         {
-                            abilityPenality = pen.getPlayCardPenality(p.ownHeroAblility.card, trgt, p, 0, isLethalCheck);
+                            abilityPenality = pen.getPlayCardPenality(p.ownHeroAblility, trgt, p, 0, isLethalCheck);
                             if (abilityPenality <= 499)
                             {
                                 //pf.activateAbility(p.ownHeroAblility, trgt.target, trgt.targetEntity, abilityPenality);
@@ -594,7 +679,7 @@
 
                     if (usePenalityManager)
                     {
-                        abilityPenality = pen.getPlayCardPenality(p.ownHeroAblility.card, null, p, 0, isLethalCheck);
+                        abilityPenality = pen.getPlayCardPenality(p.ownHeroAblility, null, p, 0, isLethalCheck);
                         if (abilityPenality <= 499)
                         {
                             //havedonesomething = true;
@@ -639,7 +724,7 @@
                 int abilityPenality = 0;
 
                 // if we have mage or priest, we have to target something####################################################
-                if (p.enemyHeroName == HeroEnum.mage || p.enemyHeroName == HeroEnum.priest)
+                if (pen.TargetAbilitysDatabase.ContainsKey(p.ownHeroAblility.card.cardIDenum))
                 {
                     List<Minion> trgts = p.enemyHeroAblility.card.getTargetsForCardEnemy(p);
                     foreach (Minion trgt in trgts)
@@ -721,6 +806,11 @@
 
                     foreach (Minion trgt in trgts)
                     {
+                        if (!m.silenced && m.name == CardDB.cardName.icehowl && trgt.isHero)
+                        {
+                            continue; //this minion cant attack heros!
+                        }
+
                         Action a = new Action(actionEnum.attackWithMinion, null, m, 0, trgt, this.pen.getAttackWithMininonPenality(m, p, trgt, false), 0);
                         ret.Add(a);
                     }
@@ -843,6 +933,7 @@
                 if (m.Angr > strongestAttack) strongestAttack = m.Angr;
                 if (m.taunt) return true;
                 if (m.name == CardDB.cardName.dancingswords || m.name == CardDB.cardName.deathlord) return true;
+                if (m.name == CardDB.cardName.flametonguetotem || m.name == CardDB.cardName.direwolfalpha) return true;
             }
 
             int haspets = 0;
@@ -878,7 +969,7 @@
 
 
                     if (m.name == CardDB.cardName.scavenginghyena) hashyena = true;
-                    if (m.handcard.card.race == 20) haspets++;
+                    if (m.handcard.card.race == TAG_RACE.PET) haspets++;
                     if (m.name == CardDB.cardName.harvestgolem || m.name == CardDB.cardName.hauntedcreeper || m.souloftheforest >= 1 || m.ancestralspirit >= 1 || m.name == CardDB.cardName.nerubianegg || m.name == CardDB.cardName.savannahhighmane || m.name == CardDB.cardName.sludgebelcher || m.name == CardDB.cardName.cairnebloodhoof || m.name == CardDB.cardName.feugen || m.name == CardDB.cardName.stalagg || m.name == CardDB.cardName.thebeast) spawnminions = true;
 
                 }

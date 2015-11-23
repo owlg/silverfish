@@ -10,6 +10,13 @@ namespace HREngine.Bots
 //    todesröcheln:/ übernehmt die kontrolle über einen zufälligen feindlichen diener.
         public override void onDeathrattle(Playfield p, Minion m)
         {
+            if (p.isServer)
+            {
+                Minion choosen = p.getRandomMinionFromSide_SERVER(!m.own, false);
+                if (choosen != null) p.minionGetControlled(choosen, m.own, false);
+                return;
+            }
+
                 List<Minion> tmp = (m.own) ? p.enemyMinions : p.ownMinions;
                 if (tmp.Count >= 1)
                 {
@@ -18,13 +25,34 @@ namespace HREngine.Bots
                     bool found = false;
 
                     //search smallest minion:
-                    foreach (Minion mnn in tmp)
+                    if (m.own)
                     {
-                        if (mnn.Hp < value && mnn.Hp >= 1)
+                        foreach (Minion mnn in tmp)
                         {
-                            target = mnn;
-                            value = target.Hp;
-                            found = true;
+                            if (mnn.Hp < value && mnn.Hp >= 1)
+                            {
+                                target = mnn;
+                                value = target.Hp;
+                                found = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        //steal a minion with has not attacked or has taunt
+                        value = -1000;
+                        foreach (Minion mnn in tmp)
+                        {
+                            int special = (m.Ready) ? 10 : 0;
+                            special += (m.taunt) ? 5 : 0;
+                            special += mnn.Hp;
+                            if (special > value)
+                            {
+                                
+                                target = mnn;
+                                value = special;
+                                found = true;
+                            }
                         }
                     }
                     if (found) p.minionGetControlled(target, m.own, false);
